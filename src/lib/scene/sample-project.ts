@@ -10,13 +10,30 @@ const ASSISTANT_REPLY =
 
 /** Crea un progetto dimostrativo per chi entra per la prima volta, così il viewer non è vuoto. */
 export async function ensureSampleProject(supabase: SupabaseClient<Database>, userId: string) {
-  const { data: project } = await supabase
+  // Flag atomico sul profilo: evita doppioni quando più richieste arrivano insieme.
+  const { data: claimed } = await supabase
+    .from("profiles")
+    .update({ sample_created: true })
+    .eq("id", userId)
+    .eq("sample_created", false)
+    .select("id");
+  if (!claimed || claimed.length === 0) {
+    // Profilo assente (utente creato senza trigger): lo crea; se esiste già, qualcun altro ha già fatto il lavoro.
+    const { data: existing } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle();
+    if (existing) return;
+    const { error: insErr } = await supabase.from("profiles").insert({ id: userId, sample_created: true });
+    if (insErr) return;
+  }
+  const { data: project, error } = await supabase
     .from("projects")
     .insert({ owner_id: userId, name: "Esempio: living con cucina", scene: sampleScene() as unknown as Json })
     .select("id")
     .single();
-  if (!project) return;
-  await supabase.from("messages").insert([
+  if (error || !project) {
+    console.error("[sample-project] insert fallito:", error?.message);
+    return;
+  }
+  const { error: mErr } = await supabase.from("messages").insert([
     { project_id: project.id, role: "user", content: [{ type: "text", text: USER_PROMPT }] },
     {
       project_id: project.id,
@@ -27,4 +44,5 @@ export async function ensureSampleProject(supabase: SupabaseClient<Database>, us
       ],
     },
   ]);
+  if (mErr) console.error("[sample-project] messaggi non inseriti:", mErr.message);
 }

@@ -192,7 +192,8 @@ export function defaultCamera(scene: Scene) {
       const r = (o.rotation * Math.PI) / 180;
       const front: Vec2 = [Math.sin(r), -Math.cos(r)];
       const weight = o.size.w * o.size.h;
-      score += Math.max(0, front[0] * toCam[0] + front[1] * toCam[1]) * weight;
+      // fronte visibile: punteggio positivo; schienale verso la camera: negativo
+      score += (front[0] * toCam[0] + front[1] * toCam[1]) * weight;
     }
     if (score > bestScore) {
       bestScore = score;
